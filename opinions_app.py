@@ -1,12 +1,16 @@
 from datetime import datetime
 from random import randrange
 
-from flask import Flask, render_template
+from flask import Flask, flash, redirect, render_template, url_for
 from flask_sqlalchemy import SQLAlchemy
+from flask_wtf import FlaskForm
+from wtforms import StringField, SubmitField, TextAreaField, URLField
+from wtforms.validators import DataRequired, Length, Optional
 
 app = Flask(__name__, static_folder='static')
 # Подключить БД SQLite через SQLAlchemy ORM.
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite3'
+app.config['SECRET_KEY'] = 'WHAT_TO_WATCH_SECRET_KEY'
 app.json.ensure_ascii = False
 # Создать экземпляр SQLAlchemy и в качестве параметра
 # передать в него экземпляр приложения Flask.
@@ -21,6 +25,23 @@ class Opinion(db.Model):
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
 
 
+class OpinionForm(FlaskForm):
+    title = StringField(
+        'Введите название фильма',
+        validators=[DataRequired(message='Обязательное поле'),
+                    Length(1, 128)]
+    )
+    text = TextAreaField(
+        'Напишите мнение',
+        validators=[DataRequired(message='Обязательное поле')]
+    )
+    source = URLField(
+        'Добавьте ссылку на подробный обзор фильма',
+        validators=[Length(1, 256), Optional()]
+    )
+    submit = SubmitField('Добавить')
+
+
 @app.route('/')
 def index_view():
     quantity = Opinion.query.count()
@@ -32,9 +53,23 @@ def index_view():
     return render_template('opinion.html', opinion=opinion)
 
 
-@app.route('/add')
+@app.route('/add', methods=['GET', 'POST'])
 def add_opinion_view():
-    return render_template('add_opinion.html')
+    form = OpinionForm()
+    if form.validate_on_submit():
+        text = form.text.data
+        if Opinion.query.filter_by(text=text).first() is not None:
+            flash('Такое мнение уже было оставлено ранее!')
+            return render_template('add_opinion.html', form=form)
+        opinion = Opinion(
+            title=form.title.data,
+            text=text,
+            source=form.source.data
+        )
+        db.session.add(opinion)
+        db.session.commit()
+        return redirect(url_for('opinion_view', id=opinion.id))
+    return render_template('add_opinion.html', form=form)
 
 
 @app.route('/opinions/<int:id>')
