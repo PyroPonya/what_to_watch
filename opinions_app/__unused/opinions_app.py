@@ -1,20 +1,27 @@
+import csv
 from datetime import datetime
 from random import randrange
 
+import click
 from flask import Flask, abort, flash, redirect, render_template, url_for
+from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, TextAreaField, URLField
 from wtforms.validators import DataRequired, Length, Optional
 
 app = Flask(__name__, static_folder='static')
+
 # Подключить БД SQLite через SQLAlchemy ORM.
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite3'
 app.config['SECRET_KEY'] = 'WHAT_TO_WATCH_SECRET_KEY'
 app.json.ensure_ascii = False
+
 # Создать экземпляр SQLAlchemy и в качестве параметра
 # передать в него экземпляр приложения Flask.
 db = SQLAlchemy(app)
+
+migrate = Migrate(app, db)
 
 
 class Opinion(db.Model):
@@ -23,6 +30,7 @@ class Opinion(db.Model):
     text = db.Column(db.Text, unique=True, nullable=False)
     source = db.Column(db.String(256))
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
+    added_by = db.Column(db.String(64))
 
 
 class OpinionForm(FlaskForm):
@@ -86,6 +94,20 @@ def internal_error(error):
 @app.errorhandler(404)
 def page_not_found(error):
     return render_template('404.html'), 404
+
+
+@app.cli.command('load_opinions')
+def load_opinions_command():
+    """Функция загрузки мнений в базу данных."""
+    with open('opinions.csv', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        counter = 0
+        for row in reader:
+            opinion = Opinion(**row)
+            db.session.add(opinion)
+            db.session.commit()
+            counter += 1
+    click.echo(f'Загружено мнений: {counter}')
 
 
 if __name__ == '__main__':
