@@ -11,4 +11,4 @@ db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
 # imports after initialization
-from . import cli_commands, error_handlers, views
+from . import api_views, cli_commands, error_handlers, views
